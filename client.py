@@ -22,13 +22,14 @@ import pickle
 ###########################################
 
 class ClientSession:
-    def __init__(self, clientName, client_UDPPort, serverName, server_UDPPort, server_TCPPort):
+    def __init__(self, clientName, client_UDPPort, serverName, server_TCPPort, filename=None):
         # initialize variables
         self.clientName = clientName
-        self.client_UDPPort = client_UDPPort
+        self.client_UDPPort = int(client_UDPPort)
         self.serverName = serverName
-        self.server_UDPPort = server_UDPPort
+        #self.server_UDPPort = server_UDPPort
         self.server_TCPPort = server_TCPPort
+        self.filename = filename
         self.segmentid_list = []
         self.bytesarray = b''
         self.initializeConnection()
@@ -40,32 +41,34 @@ class ClientSession:
     def initializeConnection(self):
         # create UDP socket 
         self.client_UDPSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.client_UDPSocket.bind((clientName, client_UDPPort))
+        self.client_UDPSocket.bind((self.clientName, self.client_UDPPort))
         # create TCP socket
         self.client_TCPSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
         # setup 3-way handshake
-        self.client_TCPSocket.connect((serverName, server_TCPPort))
+        self.client_TCPSocket.connect((self.serverName, self.server_TCPPort))
         # send over information about UDP socket
         # self.client_TCPSocket.send(clientName.encode('utf-8'))
         # time.sleep(0.0001)
         # self.client_TCPSocket.send(str(client_UDPPort).encode('utf-8'))
-        self.client_TCPSocket.send(pickle.dumps((clientName, client_UDPPort)))
+        self.client_TCPSocket.send(pickle.dumps((self.clientName, self.client_UDPPort)))
         print("Client: Successfully connected to server")
 
     def receiveData(self):
-        while True:
-            self.filename = input("Type filename here: ")
-            # sending filename on server
-            self.client_TCPSocket.send(self.filename.encode('utf-8'))
-            fileexist = int(self.client_TCPSocket.recv(1024).decode('utf-8'))
-            if fileexist == 1:
-                break
-            else:
-                print("Client: File does not exist. Please try again :(")
+        # give user option to choose file if filename not specified
+        if not self.filename:
+            while True:
+                self.filename = input("Type filename here: ")
+                # sending filename on server
+                self.client_TCPSocket.send(self.filename.encode('utf-8'))
+                self.blocks = int(self.client_TCPSocket.recv(1024).decode('utf-8'))
+                if self.blocks != 0:
+                    break
+                else:
+                    print("Client: File does not exist. Please try again :(")
         
         # get info about max file size from server
-        self.blocks = int(self.client_TCPSocket.recv(1024).decode('utf-8'))
+        # self.blocks = int(self.client_TCPSocket.recv(1024).decode('utf-8'))
         print("Client: Receiving data...")
         # set TCP socket to non-blocking to allow fast check for DONE signal
         self.client_TCPSocket.setblocking(False) 
@@ -73,10 +76,12 @@ class ClientSession:
 
         starttime = time.time()
         packetloss = 0
+        transmissioncount = 0
         while True:
             while True:
                 try:
                     if self.client_TCPSocket.recv(1024).decode('utf-8') == 'DONE':
+                        transmissioncount+=1
                         print("Client: Transmission done..")
                         break
                 except socket.error as e:
@@ -88,6 +93,7 @@ class ClientSession:
                 except socket.error as e:
                     pass
 
+            
             missing = self.missing_elements(sorted(self.segmentid_list), 0, self.blocks-1)
             print("Client: Missing packets:", missing)
 
@@ -105,7 +111,7 @@ class ClientSession:
         self.assembleData()
         print("***************************************")
         print("Total time taken: {}s".format(round(endtime-starttime,5)))
-        print("Percentage packet loss: {}%".format(round(packetloss/self.blocks,10)*100))
+        print("Percentage packet loss: {}%".format(round(packetloss/(self.blocks*transmissioncount),10)*100))
         print("***************************************")
     
     def assembleData(self):
@@ -123,11 +129,11 @@ class ClientSession:
 if __name__=='__main__':
     # filename = sys.argv[1]
     clientName = sys.argv[1]
-    client_UDPPort = 60000
-    serverName = sys.argv[2]
-    server_UDPPort = 12000
+    #client_UDPPort = 60000
+    client_UDPPort = sys.argv[2]
+    serverName = sys.argv[3]
     server_TCPPort = 12001
-    clientSession = ClientSession(clientName, client_UDPPort, serverName, server_UDPPort, server_TCPPort)
+    clientSession = ClientSession(clientName, client_UDPPort, serverName, server_TCPPort)
     clientSession.receiveData()
     clientSession.closeConnection()
 

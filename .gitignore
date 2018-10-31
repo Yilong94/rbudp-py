@@ -1,3 +1,5 @@
 *.JPG
 *.pdf
 test.py
+main.py
+__pycache__/

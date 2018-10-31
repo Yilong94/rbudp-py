@@ -4,6 +4,7 @@ import sys
 import os
 import math
 import pickle
+import threading
 
 # serverName = '127.0.0.1'
 # serverPort = 12000
@@ -22,14 +23,12 @@ import pickle
 
 ###########################################
 
-class ServerSession:
-    def __init__(self, serverName, server_UDPPort, server_TCPPort, transrate):
+class MainServerSession:
+    def __init__(self, serverName, server_TCPPort, transrate):
         self.serverName = serverName
-        self.server_UDPPort = server_UDPPort
         self.server_TCPPort = server_TCPPort
-        self.buffer_size = 1024
-        # self.sleeptime = 1/((float(transrate)*1000000/8)/(self.buffer_size+2)) + 0.0001 # 0.0001 to account for transmission time
-        self.sleeptime = 1/((float(transrate)*1000000/8)/(self.buffer_size+2)) # without transmission time
+        self.transrate = transrate
+        self.current_server_UDPPort = 50000 # for keeping track of UDP port number
         self.initializeConnection()
 
     def initializeConnection(self):
@@ -39,51 +38,92 @@ class ServerSession:
         self.server_TCPSocket.bind((self.serverName, self.server_TCPPort))
         self.server_TCPSocket.listen(1)
         print('Server: Listening for connections')
-        
+        # create a new thread when there is incoming connections
         while True:
-            self.connection_TCPSocket, addr = self.server_TCPSocket.accept()
+            connection_TCPSocket, addr = self.server_TCPSocket.accept()
+            a = ServerSession(self.serverName, self.current_server_UDPPort, self.transrate, connection_TCPSocket)
+            threading.Thread(target=a.sendData).start()
+            self.current_server_UDPPort+=1
             print("Server: Connection accepted")
-            # self.clientName = self.connection_TCPSocket.recv(1024)
-            # self.clientName = self.clientName.decode('utf-8')
-            # self.client_UDPPort = self.connection_TCPSocket.recv(1024)
-            # self.client_UDPPort = int(self.client_UDPPort.decode('utf-8'))
-            clientaddr = self.connection_TCPSocket.recv(1024)
-            self.clientName, self.client_UDPPort = pickle.loads(clientaddr)
+    def closeConnection(self):
+        self.server_TCPSocket.close()
+    
+    # TODO: closing a thread
 
-            # send over number of blocks
-            # self.filename = 'test2.JPG' # TODO: to be changed
-            # filesize = os.path.getsize(self.filename)
-            # blocks = math.ceil(filesize/1024)
-            # self.connection_TCPSocket.send(str(blocks).encode('utf-8'))
 
-            # TODO: start a UDP session to send packets over
-            self.server_UDPSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            self.server_UDPSocket.bind((serverName, server_UDPPort))
-            break
+class ThreadedServerSession:
+    def __init__(self, serverName, server_UDPPort, transrate, connection_TCPSocket):
+        self.serverName = serverName
+        self.server_UDPPort = server_UDPPort
+        # self.server_TCPPort = server_TCPPort
+        self.buffer_size = 1024
+        # self.sleeptime = 1/((float(transrate)*1000000/8)/(self.buffer_size+2)) + 0.0001 # 0.0001 to account for transmission time
+        self.sleeptime = 1/((float(transrate)*1000000/8)/(self.buffer_size+2)) # without transmission time
+        self.connection_TCPSocket = connection_TCPSocket
+        # self.initializeConnection()
+
+    # def initializeConnection(self):
+    #     # wait for TCP connection from client
+    #     self.server_TCPSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    #     self.server_TCPSocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1) # allow reuse of port number
+    #     self.server_TCPSocket.bind((self.serverName, self.server_TCPPort))
+    #     self.server_TCPSocket.listen(1)
+    #     print('Server: Listening for connections')
+        
+    #     while True:
+    #         # TODO: server only able to accept one incoming connection. need to create multiple connections with multithreading
+    #         self.connection_TCPSocket, addr = self.server_TCPSocket.accept()
+    #         print("Server: Connection accepted")
+    #         # self.clientName = self.connection_TCPSocket.recv(1024)
+    #         # self.clientName = self.clientName.decode('utf-8')
+    #         # self.client_UDPPort = self.connection_TCPSocket.recv(1024)
+    #         # self.client_UDPPort = int(self.client_UDPPort.decode('utf-8'))
+    #         clientaddr = self.connection_TCPSocket.recv(1024)
+    #         self.clientName, self.client_UDPPort = pickle.loads(clientaddr)
+
+    #         # send over number of blocks
+    #         # self.filename = 'test2.JPG' # TODO: to be changed
+    #         # filesize = os.path.getsize(self.filename)
+    #         # blocks = math.ceil(filesize/1024)
+    #         # self.connection_TCPSocket.send(str(blocks).encode('utf-8'))
+
+    #         # TODO: start a UDP session to send packets over
+    #         self.server_UDPSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    #         self.server_UDPSocket.bind((serverName, server_UDPPort))
+    #         break
     
     def closeConnection(self):
+        print('Closing thread connection')
         self.server_UDPSocket.close()
-        self.server_TCPSocket.close()
         self.connection_TCPSocket.close()
 
     def sendData(self):
         print("Sleep time",self.sleeptime)
+
+        # start a UDP session to send packets over
+        clientaddr = self.connection_TCPSocket.recv(1024)
+        self.clientName, self.client_UDPPort = pickle.loads(clientaddr)
+        self.server_UDPSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.server_UDPSocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self.server_UDPSocket.bind((self.serverName, self.server_UDPPort))
 
         print("Server: Awaiting filename from client")
         while True:
             self.filename = self.connection_TCPSocket.recv(1024)
             # check whether file exists in current directory
             if os.path.isfile(self.filename):
-                self.connection_TCPSocket.send('1'.encode('utf-8'))
+                filesize = os.path.getsize(self.filename)
+                blocks = math.ceil(filesize/1024)
+                self.connection_TCPSocket.send(str(blocks).encode('utf-8'))
                 break
             else:
                 self.connection_TCPSocket.send('0'.encode('utf-8'))
                 print("Server: File does not exist. Continue waiting for filename")
 
         # TODO: might need a time.sleep() to delay two consecutive send()
-        filesize = os.path.getsize(self.filename)
-        blocks = math.ceil(filesize/1024)
-        self.connection_TCPSocket.send(str(blocks).encode('utf-8'))
+        # filesize = os.path.getsize(self.filename)
+        # blocks = math.ceil(filesize/1024)
+        # self.connection_TCPSocket.send(str(blocks).encode('utf-8'))
 
         with open(self.filename, 'rb') as f:
             print("Server: Sending data over...")
@@ -120,15 +160,16 @@ class ServerSession:
                     for idx in missing:
                         self.server_UDPSocket.sendto(bytesarray[idx*1026:(idx+1)*1026], (self.clientName, self.client_UDPPort))
                         time.sleep(self.sleeptime)
+        
+        self.closeConnection()
 
 if __name__=='__main__':
     serverName = sys.argv[1]
-    server_UDPPort = 12000
     server_TCPPort = 12001
     transrate = sys.argv[2] # user-defined rate in megabits per second (Mbps)
-    serverSession = ServerSession(serverName, server_UDPPort, server_TCPPort, transrate)
-    serverSession.sendData()
-    serverSession.closeConnection()
+    mainServerSession = MainServerSession(serverName, server_TCPPort, transrate)
+    mainServerSession.sendData()
+    mainServerSession.closeConnection()
 
 
 # filename = 'test.pdf'

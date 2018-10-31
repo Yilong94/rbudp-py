@@ -7,3 +7,6 @@ RBUDP is a data transport tool and protocol specifically designed to move very l
 ## Getting Started
 
 Work-in-progress
+
+## TO-DO
+* Saving bytes in memory and transmission seem to be increasing with time and is slowing down RBUDP. Needs more testing to find the root cause. Possible to make it more efficient 

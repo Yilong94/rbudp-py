@@ -3,6 +3,7 @@ import time
 import sys
 import os
 import pickle
+import argparse
 
 class ClientSession:
     def __init__(self, clientName, client_UDPPort, serverName, server_TCPPort, filename=None):
@@ -38,6 +39,7 @@ class ClientSession:
             if not self.filename:
                 self.filename = input("Type filename here: ")
             # sending filename on server
+            time.sleep(0.01) # give some time for server to be on recv mode
             self.client_TCPSocket.send(self.filename.encode('utf-8'))
             # get info about max file size from server
             self.blocks = int(self.client_TCPSocket.recv(1024).decode('utf-8'))
@@ -102,11 +104,16 @@ class ClientSession:
         return sorted(set(range(start, end + 1)).difference(L))
 
 if __name__=='__main__':
+    #parser = argparse.ArgumentParser(description='Arguments for client session')
+    filename = None
+    comd_arg = sys.argv
     clientName = sys.argv[1]
     client_UDPPort = sys.argv[2]
     serverName = sys.argv[3]
+    if len(comd_arg) == 5:
+        filename = sys.argv[4]
     server_TCPPort = 12001
-    clientSession = ClientSession(clientName, client_UDPPort, serverName, server_TCPPort, 'test2.JPG')
+    clientSession = ClientSession(clientName, client_UDPPort, serverName, server_TCPPort, filename)
     clientSession.receiveData()
     clientSession.closeConnection()
 

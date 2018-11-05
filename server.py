@@ -17,7 +17,7 @@ class MainServerSession:
     def initializeConnection(self):
         # wait for TCP connection from client
         self.server_TCPSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.server_TCPSocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1) # allow reuse of port number
+          # allow reuse of port number
         self.server_TCPSocket.bind((self.serverName, self.server_TCPPort))
         self.server_TCPSocket.listen(1)
         print('Server: Listening for connections')
